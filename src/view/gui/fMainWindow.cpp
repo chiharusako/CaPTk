@@ -66,7 +66,11 @@
 #include "itkTranslationTransform.h"
 #include "ApplicationPreferences.h"
 
+#include "CaPTkDockWidget.h"
+
 //#include "DicomSeriesReader.h"
+
+#include <QFile>
 
 // this function calls an external application from CaPTk in the most generic way while waiting for output
 int fMainWindow::startExternalProcess(const QString &application, const QStringList &arguments)
@@ -250,16 +254,28 @@ fMainWindow::fMainWindow()
   m_tabWidget->setMinimumHeight(minheight);
   m_tabWidget->setMaximumHeight(m_tabWidget->minimumHeight());
 
-  m_toolTabdock->setWindowFlags(Qt::Window);
+  m_toolTabdock = new CaPTkDockWidget(this); // custom class to propagate drag-and-drop events to the main window
+  m_toolTabdock->setWindowFlags(Qt::SubWindow); // setting this as "Qt::Window" causes it to be hidden, at least on Linux.
+  // since the above window flag's effect is platform dependent, this may look strange on other platforms -- needs a test.
 
-#ifdef Q_OS_WIN
+  // Set up our connections so that fMainWindow can receive all drag-and-drop events from our tool tab dock
+  connect(m_toolTabdock, SIGNAL(dragEnteredDockWidget(QDragEnterEvent*)), this, SLOT(dragEnterEvent(QDragEnterEvent*)));
+  connect(m_toolTabdock, SIGNAL(droppedOnDockWidget(QDropEvent*)), this, SLOT(dropEvent(QDropEvent*)));
+
   m_toolTabdock->setFeatures(QDockWidget::DockWidgetFloatable);
-#else
-  //TBD fix this - work around untill solved
-  m_toolTabdock->setFeatures(QDockWidget::NoDockWidgetFeatures);
-#endif
   m_toolTabdock->setWidget(m_tabWidget);
-  overallGridLayout->addWidget(m_toolTabdock, 0, 0, 1, 3);
+  this->addDockWidget(Qt::TopDockWidgetArea, m_toolTabdock);
+  this->m_toolTabdock->setWindowTitle("Double click to undock");
+
+  //! automatic undock on low resolution
+  //! to be tested thoroughly
+  QScreen *scr = QGuiApplication::primaryScreen();
+  //!if primary screen resolution is lower than 1200x1024(any of x,y values)
+  if ((scr->size().width() < 1200) || (scr->size().height() < 1024))
+  {
+	  this->m_toolTabdock->setWindowTitle("Double click to dock");
+	  this->m_toolTabdock->setFloating(true);
+  }
 
   QFrame * frame = new QFrame(this);
   sizePolicy5.setHeightForWidth(frame->sizePolicy().hasHeightForWidth());
@@ -805,10 +821,6 @@ fMainWindow::fMainWindow()
   connect(&fetalbrainpanel, SIGNAL(drawlinear()), this, SLOT(FetalBrain_Predict()));
   connect(&fetalbrainpanel, SIGNAL(TrainNewFetalModel(std::string, std::string)), this, SLOT(FetalBrain_TrainNewModel(const std::string &, const std::string &)));
 
-
-  connect(m_imagesTable, SIGNAL(itemSelectionChanged()), this, SLOT(DisplayChanged()));
-  connect(m_imagesTable, SIGNAL(itemClicked(QTableWidgetItem*)), this, SLOT(DisplayChanged(QTableWidgetItem*)));
-
   connect(imagesPanel, SIGNAL(sigImageTableSelectionChanged()), this, SLOT(DisplayChanged()));
 
   connect(windowSpinBox, SIGNAL(editingFinished()), this, SLOT(WindowLevelEdited()));
@@ -831,7 +843,7 @@ fMainWindow::fMainWindow()
   //connect(drawingPanel, SIGNAL(FillButtonClicked(int)), this, SLOT(FillLabel(int)));
   connect(drawingPanel, SIGNAL(shapesButtonClicked(int)), this, SLOT(updateDrawMode(int)));
   connect(drawingPanel, SIGNAL(CurrentDrawingLabelChanged(int)), this, SLOT(updateDrawMode()));
-  connect(drawingPanel, SIGNAL(CurrentMaskOpacityChanged(int)), this, SLOT(ChangeMaskOpacity(int)));
+  connect(drawingPanel, SIGNAL(CurrentMaskOpacityChanged(int)), this, SLOT(ChangeMaskOpacity()));
   connect(drawingPanel, SIGNAL(helpClicked_Interaction(std::string)), this, SLOT(help_contextual(std::string)));
   connect(drawingPanel, SIGNAL(sig_ChangeLabelValuesClicked(const std::string, const std::string)), this, SLOT(CallLabelValuesChange(const std::string, const std::string)));
 
@@ -1005,7 +1017,7 @@ fMainWindow::~fMainWindow()
     if (!maskImage.empty())
     {
       this->readMaskFile(maskImage);
-      this->ChangeMaskOpacity(maskOpacity * 10);
+      this->ChangeMaskOpacity(maskOpacity);
     }
     if (!tumorPointFile.empty())
     {
@@ -1634,7 +1646,8 @@ void fMainWindow::LoadSlicerImages(const std::string &fileName, const int &image
         }
         if (!cbica::ImageSanityCheck(fname, mSlicerManagers[0]->GetPathFileName(), fourDImage))
         {
-          ShowErrorMessage("The physical dimensions of the previously loaded image and current image are inconsistent; cannot load");
+          ShowErrorMessage("The physical dimensions of the previously loaded image and current image are inconsistent; proceeding to open registration dialog");
+          ImageRegistration();
           return;
         }
 
@@ -2697,12 +2710,11 @@ void fMainWindow::toolTabDockChanged(bool bUnDocked)
 {
   if (bUnDocked)
   {
-    m_tabWidget->setMaximumHeight(m_tabWidget->minimumHeight() * 10);
-    m_toolTabdock->show();
+	  this->m_toolTabdock->setWindowTitle("Double click to dock");
   }
   else
   {
-    m_tabWidget->setMaximumHeight(m_tabWidget->minimumHeight());
+	  this->m_toolTabdock->setWindowTitle("Double click to undock");
   }
 }
 
@@ -3196,7 +3208,8 @@ void fMainWindow::readMaskFile(const std::string &maskFileName)
     {
       if (!cbica::ImageSanityCheck< ImageTypeFloat3D >(mSlicerManagers[0]->mITKImage, mask_temp))
       {
-        ShowErrorMessage("The physical dimensions of the previously loaded image and mask are inconsistent; cannot load");
+        ShowErrorMessage("The physical dimensions of the previously loaded image and the mask are inconsistent; proceeding to open registration dialog");
+        ImageRegistration();
         return;
       }
       imageSanityCheckDone = true;
@@ -5384,6 +5397,28 @@ void fMainWindow::overlayChanged(QTableWidgetItem *clickedItem)
 
 void fMainWindow::openImages(QStringList files, bool callingFromCmd)
 {
+	int ndirs = 0;
+	bool hasDir = this->hasDirectories(files, ndirs);
+
+	//! captk doesn't load directories
+	//! in case the user loaded multiple files, with some directories
+	//! we skip the directories and continue with loading the files after
+	//! showing a message
+	if (hasDir && !files.isEmpty())
+	{
+		QMessageBox msgbox;
+		msgbox.setText("CaPTk cannot load folders. Skipping folders and proceeding.");
+		int ret = msgbox.exec();
+	}
+	//! in case the user loaded directory(ies) only
+	//! we show a message and open the file load dialog
+	else if (hasDir && files.isEmpty())
+	{
+		QMessageBox msgbox;
+		msgbox.setText("CaPTk cannot load folders. Please load valid images.");
+		int ret = msgbox.exec();
+	}
+
   if (files.isEmpty())
   {
     if (!callingFromCmd)
@@ -5399,6 +5434,34 @@ void fMainWindow::openImages(QStringList files, bool callingFromCmd)
       return;
     }
   }
+
+  /**** Check if the total size of the files is more than a percentage 
+   *    of the available memory ****/
+  if (isSizeOfLoadedFilesTooBig(files, loggerFile))
+  {
+    QMessageBox msgBox;
+    msgBox.setText("The images you are trying to load are too big to be handled by CaPTk given the available memory on the system.");
+    msgBox.setInformativeText("Do you want to proceed anyway?");
+    msgBox.setStandardButtons(QMessageBox::Ok | QMessageBox::Cancel);
+    msgBox.setDefaultButton(QMessageBox::Cancel);
+    
+    int ret = msgBox.exec();
+    
+    switch (ret) 
+    {
+      case QMessageBox::Ok:
+          // Ok was clicked
+          break;
+      case QMessageBox::Cancel:
+          // Cancel was clicked
+          return;
+      default:
+          // Should never be reached
+          break;
+    }
+  }
+
+  /**** Image Loading ****/
 
   int i = 0, fileSizeCheck = files.size() + 1;
   if (mSlicerManagers.empty())
@@ -5502,7 +5565,7 @@ void fMainWindow::openImages(QStringList files, bool callingFromCmd)
       }
     }
   }
-
+  ChangeMaskOpacity(); // make sure desired mask opacity is set for drawing/etc
   updateProgress(0, "Loading complete", 100);
 }
 
@@ -5530,7 +5593,9 @@ void fMainWindow::openDicomImages(QString dir)
   auto currentImage = cbica::ReadImage<ImageTypeFloat3D>(dir.toStdString());
   if (!currentImage)
   {
-    ShowMessage("Dicom Load Failed");
+	  ShowErrorMessage("Dicom load failed. CaPTk only supports a limited DICOM protocols \
+ for MR, CT and MG modalities. Please consider converting the dataset to Nifti \
+ before loading.",this);
     return;
   }
   SlicerManager* imageManager = new SlicerManager(3, mLandmarks, mSeedPoints, mTissuePoints);
@@ -5711,7 +5776,7 @@ void fMainWindow::ApplicationTexturePipeline()
   if ((mSlicerManagers[0]->mITKImage->GetLargestPossibleRegion().GetSize()[2] != 1) /*||
     (mImageSubType != CAPTK::ImageModalityType::IMAGE_MAMMOGRAM)*/)
   {
-    ShowErrorMessage("This is only valid for mammogram images");
+    ShowErrorMessage("You have tried running an application that is only valid for mammogram images. Please load the correct image type or change the modality using the combo-box beside the image name.");
     return;
   }
 
@@ -5775,7 +5840,7 @@ void fMainWindow::ApplicationBreastSegmentation()
   if ((mSlicerManagers[0]->mITKImage->GetLargestPossibleRegion().GetSize()[2] != 1) /*||
     (mImageSubType != CAPTK::ImageModalityType::IMAGE_MAMMOGRAM)*/)
   {
-    ShowErrorMessage("This is only valid for mammogram images");
+    ShowErrorMessage("You have tried running an application that is only valid for mammogram images. Please load the correct image type or change the modality using the combo-box beside the image name.");
     return;
   }
 
@@ -5830,7 +5895,7 @@ void fMainWindow::ApplicationLIBRASingle()
   if ((mSlicerManagers[0]->mITKImage->GetLargestPossibleRegion().GetSize()[2] != 1) /*||
     (mImageSubType != CAPTK::ImageModalityType::IMAGE_MAMMOGRAM)*/)
   {
-    ShowErrorMessage("This is only valid for mammogram images");
+    ShowErrorMessage("You have tried running an application that is only valid for mammogram images. Please load the correct image type or change the modality using the combo-box beside the image name.");
     return;
   }
 
@@ -6679,6 +6744,9 @@ void fMainWindow::ApplicationGeodesicTraining()
 
   m_IsGeodesicTrainingRunning = true;
 
+
+  /* ---- Checks ---- */
+
   // Check if there are loaded images
   if (mSlicerManagers.empty())
   {
@@ -6695,12 +6763,13 @@ void fMainWindow::ApplicationGeodesicTraining()
     return;
   }
 
+
+  /* ---- Parsing, conversions, and initializations ---- */
+
   // The algorithm needs to know if the images are 2D or 3D
   unsigned int dimensions = (
     (mSlicerManagers[0]->mITKImage->GetLargestPossibleRegion().GetSize()[2] == 1) ? 2 : 3
   );
-
-  /*unsigned int dimensions = 3;*/
 
   // Different operations happen if the user reruns it on the same images
   std::string firstFileName = mSlicerManagers[0]->mFileName;
@@ -6709,7 +6778,13 @@ void fMainWindow::ApplicationGeodesicTraining()
 
   updateProgress(0, "Geodesic Training segmentation started, please wait");
 
+  // The ROIs that are needed (most of them will be populated later if needed)
   LabelsImagePointer3D currentROI = convertVtkToItk<int, 3>(mSlicerManagers[0]->mMask);
+  LabelsImagePointer2D currentROI2D;
+  LabelsImagePointer3D previousResult;
+  LabelsImagePointer2D previousResult2D;
+  LabelsImagePointer3D mask;
+  LabelsImagePointer2D mask2D;
 
   // Check if there are at least two different labels in the image (function in UtilImageToCvMatGTS.h)
   auto labelsMap = GeodesicTrainingSegmentation::ParserGTS::CountsOfEachLabel<LabelsImageType3D>(currentROI);
@@ -6720,78 +6795,47 @@ void fMainWindow::ApplicationGeodesicTraining()
     return;
   }
 
-  // The input that GeodesicTraining needs
+  // Find the input images (always 3D at first)
   std::vector<InputImagePointer3D> inputImages;
-  LabelsImagePointer3D mask;
-
-  // Find the input images
   for (SlicerManager* sm : mSlicerManagers)
   {
     inputImages.push_back(sm->mITKImage);
   }
+  std::vector<InputImagePointer2D> inputImages2D(inputImages.size());
 
+  // Find the mask (always 3D)
   if (!isRerun)
   {
     // The user runs the algorithm for the first time for this subject
-    mask = convertVtkToItk<int, 3>(mSlicerManagers[0]->mMask);
+    mask = currentROI;
   }
-  else {
+  else 
+  {
     // The user is doing a rerun for the same subject
     // The new points that the user drew on the output segmentation are added
     // to the old mask and the algorithm executes again.
-    mask = cbica::ReadImage<LabelsImageType3D>(m_tempFolderLocation + "/GeodesicTrainingOutput/mask.nii.gz");
-    LabelsImagePointer3D previousResult =
-      cbica::ReadImage<LabelsImageType3D>(m_tempFolderLocation + "/GeodesicTrainingOutput/labels_res.nii.gz");
-
-    itk::ImageRegionIterator<LabelsImageType3D> iter_m(mask, mask->GetRequestedRegion());
-    itk::ImageRegionIterator<LabelsImageType3D> iter_p(previousResult, previousResult->GetRequestedRegion());
-    itk::ImageRegionIterator<LabelsImageType3D> iter_c(currentROI, currentROI->GetRequestedRegion());
-
-    for (iter_m.GoToBegin(), iter_p.GoToBegin(), iter_c.GoToBegin(); !iter_m.IsAtEnd(); ++iter_m, ++iter_p, ++iter_c)
+    if (dimensions == 3)
     {
-      int p = iter_p.Get();
-      int c = iter_c.Get();
-
-      if (p != c)
-      {
-        iter_m.Set(c);
-      }
+      mask           = cbica::ReadImage<LabelsImageType3D>(
+        m_tempFolderLocation + "/GeodesicTrainingOutput/mask.nii.gz"
+      );
+      previousResult = cbica::ReadImage<LabelsImageType3D>(
+        m_tempFolderLocation + "/GeodesicTrainingOutput/labels_res.nii.gz"
+      );
+    }
+    else {
+      mask2D           = cbica::ReadImage<LabelsImageType2D>(
+        m_tempFolderLocation + "/GeodesicTrainingOutput/mask.nii.gz"
+      );
+      previousResult2D = cbica::ReadImage<LabelsImageType2D>(
+        m_tempFolderLocation + "/GeodesicTrainingOutput/labels_res.nii.gz"
+      );
     }
   }
 
-  // Save the mask for potential reruns on the same subject
-  if (!cbica::isDir(m_tempFolderLocation + "/GeodesicTrainingOutput"))
+  // Convert to 2D if needed
+  if (dimensions == 2)
   {
-    cbica::createDir(m_tempFolderLocation + "/GeodesicTrainingOutput");
-  }
-  cbica::WriteImage<LabelsImageType3D>(mask, m_tempFolderLocation + "/GeodesicTrainingOutput/mask.nii.gz");
-
-  if (dimensions == 3)
-  {
-    // 3D
-    m_GeodesicTrainingCaPTkApp3D = new GeodesicTrainingCaPTkApp<3>(this);
-
-    // Connect the signals/slots for progress updates and notifying that the algorithm is finished
-    connect(m_GeodesicTrainingCaPTkApp3D, SIGNAL(GeodesicTrainingFinished()),
-      this, SLOT(GeodesicTrainingFinishedHandler())
-    );
-    connect(m_GeodesicTrainingCaPTkApp3D, SIGNAL(GeodesicTrainingFinishedWithError(QString)),
-      this, SLOT(GeodesicTrainingSegmentationResultErrorHandler(QString))
-    );
-    auto test = connect(m_GeodesicTrainingCaPTkApp3D, SIGNAL(GeodesicTrainingProgressUpdate(int, std::string, int)),
-      this, SLOT(updateProgress(int, std::string, int))
-    );
-
-    // Run the algorithm
-    m_GeodesicTrainingCaPTkApp3D->SetOutputPath(m_tempFolderLocation + "/GeodesicTrainingOutput");
-    m_GeodesicTrainingCaPTkApp3D->Run(inputImages, mask);
-  }
-  else {
-    // 2D (which has been loaded as a 3D image with a single slize in z-direction)
-    std::vector< InputImagePointer2D > inputImages2D(inputImages.size());
-    LabelsImagePointer2D               mask2D;
-
-    // Convert from 3D to 2D
     auto regionSize = inputImages[0]->GetLargestPossibleRegion().GetSize();
     regionSize[2] = 0; // Only 2D image is needed
 
@@ -6810,19 +6854,117 @@ void fMainWindow::ApplicationGeodesicTraining()
       inputImages2D[i]->DisconnectPipeline();
     }
 
-    // Convert mask
-    LabelsImageType3D::IndexType regionIndex;
-    regionIndex.Fill(0);    
-    LabelsImageType3D::RegionType desiredRegion(regionIndex, regionSize);
-    auto extractor = itk::ExtractImageFilter< LabelsImageType3D, LabelsImageType2D >::New();
-    extractor->SetExtractionRegion(desiredRegion);
-    extractor->SetInput(mask);
-    extractor->SetDirectionCollapseToIdentity();
-    extractor->Update();
-    mask2D = extractor->GetOutput();
-    mask2D->DisconnectPipeline();
+    if (mask2D == nullptr) // that means it wasn't loaded from file
+    {    
+      // Convert mask
+      LabelsImageType3D::IndexType regionIndex;
+      regionIndex.Fill(0);    
+      LabelsImageType3D::RegionType desiredRegion(regionIndex, regionSize);
+      auto extractor = itk::ExtractImageFilter< LabelsImageType3D, LabelsImageType2D >::New();
+      extractor->SetExtractionRegion(desiredRegion);
+      extractor->SetInput(mask);
+      extractor->SetDirectionCollapseToIdentity();
+      extractor->Update();
+      mask2D = extractor->GetOutput();
+      mask2D->DisconnectPipeline();
+    }
 
+    // Convert currentROI to 2D block
+    {
+      LabelsImageType3D::IndexType regionIndex;
+      regionIndex.Fill(0);    
+      LabelsImageType3D::RegionType desiredRegion(regionIndex, regionSize);
+      auto extractor = itk::ExtractImageFilter< LabelsImageType3D, LabelsImageType2D >::New();
+      extractor->SetExtractionRegion(desiredRegion);
+      extractor->SetInput(currentROI);
+      extractor->SetDirectionCollapseToIdentity();
+      extractor->Update();
+      currentROI2D = extractor->GetOutput();
+      currentROI2D->DisconnectPipeline();
+    }
+  }
+
+  // Keep only the actual seeds on the mask if it's a rerun 
+  // (and not the previous output segmentation on which the user draws the corrections)
+  if (isRerun)
+  {  
+    if (dimensions == 3)
+    {
+      // [ 3D ]
+      itk::ImageRegionIterator<LabelsImageType3D> iter_m(mask, mask->GetRequestedRegion());
+      itk::ImageRegionIterator<LabelsImageType3D> iter_p(previousResult, previousResult->GetRequestedRegion());
+      itk::ImageRegionIterator<LabelsImageType3D> iter_c(currentROI, currentROI->GetRequestedRegion());
+
+      for (iter_m.GoToBegin(), iter_p.GoToBegin(), iter_c.GoToBegin(); !iter_m.IsAtEnd(); ++iter_m, ++iter_p, ++iter_c)
+      {
+        int p = iter_p.Get();
+        int c = iter_c.Get();
+
+        if (p != c)
+        {
+          iter_m.Set(c);
+        }
+      }
+    }
+    else 
+    {
+      // [ 2D ]
+      itk::ImageRegionIterator<LabelsImageType2D> iter_m(mask2D, mask2D->GetRequestedRegion());
+      itk::ImageRegionIterator<LabelsImageType2D> iter_p(previousResult2D, previousResult2D->GetRequestedRegion());
+      itk::ImageRegionIterator<LabelsImageType2D> iter_c(currentROI2D, currentROI2D->GetRequestedRegion());
+
+      for (iter_m.GoToBegin(), iter_p.GoToBegin(), iter_c.GoToBegin(); !iter_m.IsAtEnd(); ++iter_m, ++iter_p, ++iter_c)
+      {
+        int p = iter_p.Get();
+        int c = iter_c.Get();
+
+        if (p != c)
+        {
+          iter_m.Set(c);
+        }
+      }
+    }
+  }
+
+  // Create cache dir
+  if (!cbica::isDir(m_tempFolderLocation + "/GeodesicTrainingOutput"))
+  {
+    cbica::createDir(m_tempFolderLocation + "/GeodesicTrainingOutput");
+  }
+
+
+  /* ---- Run ---- */
+
+  if (dimensions == 3)
+  {
+    // [ 3D ]
+
+    cbica::WriteImage<LabelsImageType3D>(mask, m_tempFolderLocation + "/GeodesicTrainingOutput/mask.nii.gz");
+
+    m_GeodesicTrainingCaPTkApp3D = new GeodesicTrainingCaPTkApp<3>(this);
+
+    // Connect the signals/slots for progress updates and notifying that the algorithm is finished
+    connect(m_GeodesicTrainingCaPTkApp3D, SIGNAL(GeodesicTrainingFinished()),
+      this, SLOT(GeodesicTrainingFinishedHandler())
+    );
+    connect(m_GeodesicTrainingCaPTkApp3D, SIGNAL(GeodesicTrainingFinishedWithError(QString)),
+      this, SLOT(GeodesicTrainingSegmentationResultErrorHandler(QString))
+    );
+    auto test = connect(m_GeodesicTrainingCaPTkApp3D, SIGNAL(GeodesicTrainingProgressUpdate(int, std::string, int)),
+      this, SLOT(updateProgress(int, std::string, int))
+    );
+
+    // Run the algorithm
+    m_GeodesicTrainingCaPTkApp3D->SetOutputPath(m_tempFolderLocation + "/GeodesicTrainingOutput");
+    m_GeodesicTrainingCaPTkApp3D->Run(inputImages, mask);
+  }
+  else 
+  {
+    // [ 2D ]
     // Same as 3D but in 2D form
+
+    cbica::WriteImage<LabelsImageType2D>(mask2D, m_tempFolderLocation + "/GeodesicTrainingOutput/mask.nii.gz");
+
     m_GeodesicTrainingCaPTkApp2D = new GeodesicTrainingCaPTkApp<2>(this);
 
     // Connect the signals/slots for progress updates and notifying that the algorithm is finished
@@ -6840,7 +6982,6 @@ void fMainWindow::ApplicationGeodesicTraining()
     m_GeodesicTrainingCaPTkApp2D->SetOutputPath(m_tempFolderLocation + "/GeodesicTrainingOutput");
     m_GeodesicTrainingCaPTkApp2D->Run(inputImages2D, mask2D);
   }
-
 }
 #endif
 
@@ -6983,7 +7124,7 @@ void fMainWindow::ImageMamogramPreprocess()
 
   if (mSlicerManagers[0]->mImageSubType != CAPTK::ImageModalityType::IMAGE_MAMMOGRAM)
   {
-    ShowErrorMessage("This is only valid for mammogram images");
+    ShowErrorMessage("You have tried running an application that is only valid for mammogram images. Please load the correct image type or change the modality using the combo-box beside the image name.");
     return;
   }
 
@@ -7215,6 +7356,7 @@ void fMainWindow::EnableComparisonMode(bool enable)
 		this->GetComparisonViewers()[i]->SetImage(mSlicerManagers[i]->GetSlicer(0)->GetImage(), mSlicerManagers[i]->GetSlicer(0)->GetTransform());
 		this->GetComparisonViewers()[i]->SetMask(mSlicerManagers[0]->GetMask());
 		this->GetComparisonViewers()[i]->SetRenderWindow(0, nullptr);
+		this->GetComparisonViewers()[i]->SetImageSeriesDescription(mSlicerManagers[i]->mBaseFileName);
 	}
 
 	if (nLoadedData == 2) //! 2 datasets are loaded
@@ -8661,19 +8803,25 @@ void fMainWindow::ChangeBrushSize(int size)
   updateDrawMode();
 }
 
-void fMainWindow::ChangeMaskOpacity(int newMaskOpacity) // multiLabel uncomment this function
+void fMainWindow::ChangeMaskOpacity() // multiLabel uncomment this function
 {
-  double tempOpacity = newMaskOpacity * 0.1;
+  // If passed with no parameter, get the value from the drawing panel
+  double tempOpacity = drawingPanel->getCurrentOpacity() * 0.1; // drawingPanel selected opacity is an int (1-10), convert to float(0.1 - 1.0)
+  ChangeMaskOpacity(tempOpacity);
+}
+
+void fMainWindow::ChangeMaskOpacity(const float newOpacity)
+{
   for (size_t i = 0; i < this->mSlicerManagers.size(); i++)
   {
     for (size_t j = 0; j < 3; j++)
     {
-      this->mSlicerManagers[i]->GetSlicer(j)->mMaskOpacity = tempOpacity;
-      this->mSlicerManagers[i]->GetSlicer(j)->mMaskActor->SetOpacity(tempOpacity);
-      this->mSlicerManagers[i]->GetSlicer(j)->mMask->Modified();
+        this->mSlicerManagers[i]->GetSlicer(j)->mMaskOpacity = newOpacity;
+        this->mSlicerManagers[i]->GetSlicer(j)->mMaskActor->SetOpacity(newOpacity);
+        this->mSlicerManagers[i]->GetSlicer(j)->mMask->Modified();
     }
   }
-  this->mSlicerManagers[0]->Render();
+  UpdateRenderWindows(); // reflect the new value
 }
 
 void fMainWindow::ChangeDrawingLabel(int drawingLabel) // multiLabel uncomment this function
@@ -9854,6 +10002,26 @@ std::vector< fMainWindow::ActionAndName >fMainWindow::populateStringListInMenu(c
   //}
 
   return returnVector;
+}
+
+bool fMainWindow::hasDirectories(QStringList &files, int &nDirs)
+{
+	int nfiles = files.size();
+	bool hasDir = false;
+	QStringList::iterator itr;
+
+	//! iterating over all loaded files(can be multiple)
+	//! to check if there are directories
+	for (itr = files.begin(); itr != files.end(); ++itr)
+	{
+		if (QFileInfo(*itr).isDir())
+		{
+			hasDir = true;
+			nDirs++;
+			files.erase(itr);
+		}
+	}
+	return hasDir;
 }
 
 void fMainWindow::OnPreferencesMenuClicked()

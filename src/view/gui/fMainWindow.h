@@ -355,6 +355,9 @@ private:
   **/
   std::vector< ActionAndName > populateStringListInMenu(const std::vector< std::string > &vectorOfInputs, QMainWindow* inputFMainWindow, QMenu* menuToPopulate, std::string menuAppSubGroup, bool ExcludeGeodesic);
 
+  //! check if input files also include directories
+  bool hasDirectories(QStringList &lst, int &nDirs);
+
   // initialize vectors of Actions and Names so that the process can be automated and the QAction is tied to its corresponding Name
   std::vector< ActionAndName >
     vectorOfGBMApps, // GBM-specific applications
@@ -494,15 +497,6 @@ public:
   */
   ImageTypeFloat3D::Pointer RescaleImageIntensity(ImageTypeFloat3D::Pointer image);
 
-  /*
-  \brief Drag event initialization
-  */
-  void dragEnterEvent(QDragEnterEvent *event);
-
-  /*
-  \brief Drop Event parsing
-  */
-  void dropEvent(QDropEvent *event);
 
   /*
   \brief This function is used to load parameters from the command line
@@ -535,6 +529,16 @@ public slots:
 
   //! slot on movement of slider in comparison mode
   void OnSliderMovedInComparisonMode(int);
+
+  /**
+  \brief Drag event initialization. Can accept events emitted from widgets.
+  */
+  void dragEnterEvent(QDragEnterEvent *event);
+
+  /**
+  \brief Drop Event parsing slot. Can accept events emitted from widgets.
+  */
+  void dropEvent(QDropEvent *event);
 
   /**
   \brief Updates draw mode when drawing panel changes
@@ -1053,9 +1057,14 @@ public slots:
   void ChangeDrawingLabel(int drawingLabel); // multiLabel uncomment this function
 
   /**
-  \brief Changes the opacity in the drawing
+  \brief Changes the selected opacity to draw with, pulling directly from the opacity selected in the drawing panel
   */
-  void ChangeMaskOpacity(int newMaskOpacity); // multiLabel uncomment this function
+  void ChangeMaskOpacity(); // multiLabel uncomment this function
+
+  /**
+  \brief Changes the selected opacity to display by input of a number (float).
+  */
+  void ChangeMaskOpacity(float newOpacity);
 
   /**
   \brief Checks whether required images are present for the recurrence estimation application
