@@ -275,3 +275,88 @@ inline bool isSizeOfLoadedFilesTooBig(QStringList files, std::string loggerFile 
     return false;
   }
 }
+inline void WriteCSVFilesWithHorizontalAndVerticalHeaders(VariableSizeMatrixType inputdata, std::vector<std::string> horizontal_ids, std::vector<std::string> vertical_ids, std::string filepath)
+{
+  std::ofstream myfile;
+  myfile.open(filepath);
+
+  myfile << " ";
+  for(unsigned int col_index=0;col_index<vertical_ids.size();col_index++)
+      myfile << ","<<vertical_ids[col_index];
+  myfile << "\n";
+  for (unsigned int row_index = 0; row_index < inputdata.Rows(); row_index++)
+  {
+   myfile << horizontal_ids[row_index];
+    for (unsigned int col_index = 0; col_index < inputdata.Cols(); col_index++)
+       myfile << "," << std::to_string(inputdata[row_index][col_index]);
+    myfile << "\n";
+  }
+  myfile.close();
+}
+
+
+inline void WriteCSVFiles(VariableSizeMatrixType inputdata, std::string filepath)
+{
+  std::ofstream myfile;
+  myfile.open(filepath);
+  for (unsigned int index1 = 0; index1 < inputdata.Rows(); index1++)
+  {
+    for (unsigned int index2 = 0; index2 < inputdata.Cols(); index2++)
+    {
+      if (index2 == 0)
+        myfile << std::to_string(inputdata[index1][index2]);
+      else
+        myfile << "," << std::to_string(inputdata[index1][index2]);
+    }
+    myfile << "\n";
+  }
+  myfile.close();
+}
+inline void WriteCSVFiles(VectorVectorDouble inputdata, std::string filepath)
+{
+  std::ofstream myfile;
+  myfile.open(filepath);
+  for (unsigned int index1 = 0; index1 < inputdata.size(); index1++)
+  {
+    for (unsigned int index2 = 0; index2 < inputdata[0].size(); index2++)
+    {
+      if (index2 == 0)
+        myfile << std::to_string(inputdata[index1][index2]);
+      else
+        myfile << "," << std::to_string(inputdata[index1][index2]);
+    }
+    myfile << "\n";
+  }
+  myfile.close();
+}
+
+inline void WriteCSVFiles(VariableLengthVectorType inputdata, std::string filepath)
+{
+  std::ofstream myfile;
+  myfile.open(filepath);
+  for (unsigned int index1 = 0; index1 < inputdata.Size(); index1++)
+    myfile << std::to_string(inputdata[index1]) << ",";
+
+  myfile << "\n";
+  myfile.close();
+}
+inline void WriteCSVFiles(std::vector<int> inputdata, std::string filepath)
+{
+  std::ofstream myfile;
+  myfile.open(filepath);
+  for (unsigned int index1 = 0; index1 < inputdata.size(); index1++)
+    myfile << std::to_string(inputdata[index1]) << ",";
+
+  myfile << "\n";
+  myfile.close();
+}
+inline void WriteCSVFiles(std::vector<double> inputdata, std::string filepath)
+{
+  std::ofstream myfile;
+  myfile.open(filepath);
+  for (unsigned int index1 = 0; index1 < inputdata.size(); index1++)
+    myfile << std::to_string(inputdata[index1]) << ",";
+
+  myfile << "\n";
+  myfile.close();
+}
