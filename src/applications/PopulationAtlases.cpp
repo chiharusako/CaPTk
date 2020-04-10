@@ -40,7 +40,9 @@ std::vector<typename ImageType::Pointer> PopulationAtlases::GeneratePopualtionAt
 		atlasimage->SetBufferedRegion(AtlasImagePointer->GetBufferedRegion());
 		atlasimage->Allocate();
 		atlasimage->FillBuffer(0);
-
+    /* This loop iterates through all the ATLAS_LABELS given in the input .csv file and calculates 
+    atlas for each atlas label 
+    */
 		for (int j = 0; j < atlas_labels.size(); j++)
 		{
 			if (atlas_labels[j] == atlas_no)
@@ -92,7 +94,10 @@ bool PopulationAtlases::CalculateSpatialLocationFeatures(const std::vector<std::
     logger.WriteError("Cannot read the atlas file " + inputatlas + ".Error code : " + std::string(e1.what()));
     return false;
   }
-
+  /*This segment of code reads input atlas space images and passes those to 
+  GetSpatialLocationFeaturesForFixedNumberOfRegions function for calculation of location features
+  Final results are stored in AllLocationFeatures
+  */
   AllLocationFeatures.SetSize(image_paths.size(), number_of_regions);
   for (int index1 = 0; index1 < image_paths.size(); index1++)
   {
