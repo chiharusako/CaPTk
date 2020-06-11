@@ -171,7 +171,6 @@ fMainWindow::fMainWindow()
 
   //! load preferences
   ApplicationPreferences::GetInstance()->DeSerializePreferences();
-  ApplicationPreferences::GetInstance()->DisplayPreferences();
 
   //! comparison mode OFF at startup
   this->SetComparisonMode(false);
@@ -260,13 +259,13 @@ fMainWindow::fMainWindow()
   m_toolTabdock->setFeatures(QDockWidget::DockWidgetFloatable);
   m_toolTabdock->setWidget(m_tabWidget);
   this->addDockWidget(Qt::TopDockWidgetArea, m_toolTabdock);
-  this->m_toolTabdock->setWindowTitle("Double click to undock");
 
 //   Set up our connections so that fMainWindow can receive all drag-and-drop events from our tool tab dock
   connect(m_toolTabdock, SIGNAL(dragEnteredDockWidget(QDragEnterEvent*)), this, SLOT(dragEnterEvent(QDragEnterEvent*)));
   connect(m_toolTabdock, SIGNAL(droppedOnDockWidget(QDropEvent*)), this, SLOT(dropEvent(QDropEvent*)));
+  connect(m_toolTabdock, SIGNAL(close()), this, SLOT(close())); //call the application close routine on signal from dockwidget
 
-//  ! automatic undock on low resolution
+  //! automatic undock on low resolution
   //! to be tested thoroughly
   QScreen *scr = QGuiApplication::primaryScreen();
   //!if primary screen resolution is lower than 1200x1024(any of x,y values)
@@ -385,10 +384,10 @@ fMainWindow::fMainWindow()
 #endif
 
   auto lungAppList = " LungField Nodule Analysis";
-  //std::string miscAppList = " DirectionalityEstimate DiffusionDerivatives PerfusionAlignment PerfusionDerivatives PerfusionPCA TrainingModule";
-  std::string miscAppList = " DirectionalityEstimate DiffusionDerivatives TrainingModule";
   std::string segAppList = " itksnap GeodesicSegmentation GeodesicTrainingSegmentation deepmedic_tumor deepmedic_brain";
-  std::string preProcessingAlgos = " DCM2NIfTI BiasCorrect-N3 Denoise-SUSAN GreedyRegistration HistogramMatching ZScoringNormalizer deepmedic_brain";
+  std::string miscAppList = " DirectionalityEstimate DiffusionDerivatives PerfusionPCA PerfusionDerivatives TrainingModule";
+  
+  std::string preProcessingAlgos = " DCM2NIfTI BiasCorrect-N3 Denoise-SUSAN GreedyRegistration HistogramMatching ZScoringNormalizer deepmedic_brain BraTSPipeline";
 #ifndef __APPLE__
   preProcessingAlgos += " breastNormalize";
 #endif
@@ -396,6 +395,7 @@ fMainWindow::fMainWindow()
 
   vectorOfGBMApps = populateStringListInMenu(brainAppList, this, menuApp, "Glioblastoma", false);
   menuApp->addSeparator();
+
   if (!breastAppList.empty())
   {
     vectorOfBreastApps = populateStringListInMenu(breastAppList, this, menuApp, "Breast Cancer", false);
@@ -403,8 +403,10 @@ fMainWindow::fMainWindow()
   }
   vectorOfLungApps = populateStringListInMenu(lungAppList, this, menuApp, "Lung Cancer", false);
   menuApp->addSeparator();
+
   vectorOfSegmentationApps = populateStringListInMenu(segAppList, this, menuApp, "Segmentation", false);
   vectorOfMiscApps = populateStringListInMenu(miscAppList, this, menuApp, "Miscellaneous", false);
+  
   vectorOfPreprocessingActionsAndNames = populateStringListInMenu(preProcessingAlgos, this, menuPreprocessing, "", false);
   vectorOfDeepLearningActionsAndNames = populateStringListInMenu(deepLearningAlgos, this, menuDeepLearning, "", false);
   auto temp = populateStringListInMenu(" ", this, menuDeepLearning, "Breast", false);
@@ -439,17 +441,6 @@ fMainWindow::fMainWindow()
         menuDownload->addAction("LIBRA");
       }
     }
-    //if (currentActionAndName.name != "Breast Cancer")
-    //{
-    //  if (!libraCheck)
-    //  {
-    //    if (currentActionAndName.name.find("libra") != std::string::npos)
-    //    {
-    //      libraCheck = true;
-    //      menuDownload->addAction("LIBRA");
-    //    }
-    //  }
-    //}
   }
 
   bool sbrtCheck = false;
@@ -474,12 +465,9 @@ fMainWindow::fMainWindow()
   {
     if (currentActionAndName.name != "Miscellaneous")
     {
-      if ((currentActionAndName.name != "itksnap") && (currentActionAndName.name != "deepmedic"))
+      if (!currentActionAndName.name.empty())
       {
-        if (!currentActionAndName.name.empty())
-        {
-          menuDownload->addAction(currentActionAndName.name.c_str());
-        }
+        menuDownload->addAction(currentActionAndName.name.c_str());
       }
     }
   }
@@ -519,9 +507,9 @@ fMainWindow::fMainWindow()
 
   connect(featurePanel, SIGNAL(helpClicked_FeaUsage(std::string)), this, SLOT(help_contextual(std::string)));
   connect(&registrationPanel, 
-    SIGNAL(RegistrationSignal(std::string, std::vector<std::string>, std::vector<std::string>, std::vector<std::string>, std::string, bool, bool, bool, std::string, std::string)),
+    SIGNAL(RegistrationSignal(std::string, std::vector<std::string>, std::vector<std::string>, std::vector<std::string>, std::string, bool, bool, bool, std::string, std::string, std::string)),
     this, 
-    SLOT(Registration(std::string, std::vector<std::string>, std::vector<std::string>, std::vector<std::string>, std::string, bool, bool, bool, std::string, std::string)));
+    SLOT(Registration(std::string, std::vector<std::string>, std::vector<std::string>, std::vector<std::string>, std::string, bool, bool, bool, std::string, std::string, std::string)));
 
   cbica::createDir(loggerFolder);
   m_tempFolderLocation = loggerFolder + "tmp_" + cbica::getCurrentProcessID();
@@ -569,7 +557,6 @@ fMainWindow::fMainWindow()
 
   connect(actionLoad_Recurrence_Images, SIGNAL(triggered()), this, SLOT(openImages()));
   connect(actionLoad_Nifti_Images, SIGNAL(triggered()), this, SLOT(openImages()));
-  //connect(actionLoad_Dicom_Images, SIGNAL(triggered()), this, SLOT(openDicomImages()));
 
   connect(actionSave_ROI_Images, SIGNAL(triggered()), this, SLOT(SaveDrawing()));
   connect(actionSave_ROI_Dicom_Images, SIGNAL(triggered()), this, SLOT(SaveDicomDrawing()));
@@ -585,6 +572,7 @@ fMainWindow::fMainWindow()
   connect(help_bugs, SIGNAL(triggered()), this, SLOT(help_BugTracker()));
 
   connect(menuDownload, SIGNAL(triggered(QAction*)), this, SLOT(help_Download(QAction*)));
+
   connect(supportMenu, SIGNAL(triggered(QAction*)), this, SLOT(help_Download(QAction*)));
 
   connect(&mHelpTutorial, SIGNAL(skipTutorialOnNextRun(bool)), this, SLOT(skipTutorial(bool)));
@@ -804,7 +792,12 @@ fMainWindow::fMainWindow()
     {
       vectorOfPreprocessingActionsAndNames[i].action->setText("Mammogram Preprocessing");
       connect(vectorOfPreprocessingActionsAndNames[i].action, SIGNAL(triggered()), this, SLOT(ImageMamogramPreprocess()));
-    }
+    } 
+    else if (vectorOfPreprocessingActionsAndNames[i].name.find("BraTSPipeline") != std::string::npos)
+    {
+      vectorOfPreprocessingActionsAndNames[i].action->setText("BraTS Pipeline");
+      connect(vectorOfPreprocessingActionsAndNames[i].action, SIGNAL(triggered()), this, SLOT(ImageBraTSPipeline()));
+    } 
   }
 
   // add a single function for all preprocessing steps, this function will check for the specific names and then initiate that algorithm
@@ -851,7 +844,7 @@ fMainWindow::fMainWindow()
   connect(drawingPanel, SIGNAL(CurrentMaskOpacityChanged(int)), this, SLOT(ChangeMaskOpacity()));
   connect(drawingPanel, SIGNAL(helpClicked_Interaction(std::string)), this, SLOT(help_contextual(std::string)));
   connect(drawingPanel, SIGNAL(sig_ChangeLabelValuesClicked(const std::string, const std::string)), this, SLOT(CallLabelValuesChange(const std::string, const std::string)));
-
+  connect(drawingPanel, SIGNAL(ApplyMask()), this, SLOT(OnApplyMask()));
 
   connect(&recurrencePanel, SIGNAL(SubjectBasedRecurrenceEstimate(std::string, bool, bool, bool, bool)), this, SLOT(StartRecurrenceEstimate(const std::string &, bool, bool, bool, bool)));
   connect(&recurrencePanel, SIGNAL(SubjectBasedExistingRecurrenceEstimate(std::string, std::string, bool, bool, bool, bool)), this, SLOT(LoadedSubjectExistingRecurrenceEstimate(const std::string &, const std::string &, bool, bool, bool, bool)));
@@ -863,7 +856,7 @@ fMainWindow::fMainWindow()
 
 
   connect(&survivalPanel, SIGNAL(SurvivalPredictionOnExistingModel(const std::string, const std::string, const std::string)), this, SLOT(CallForSurvivalPredictionOnExistingModelFromMain(const std::string, const std::string, const std::string)));
-  connect(&survivalPanel, SIGNAL(PrepareNewSurvivalPredictionModel(const std::string, const std::string)), this, SLOT(CallForNewSurvivalPredictionModelFromMain(const std::string, const std::string)));
+  connect(&survivalPanel, SIGNAL(TrainNewSurvivalPredictionModel(const std::string, const std::string)), this, SLOT(CallForNewSurvivalPredictionModelFromMain(const std::string, const std::string)));
 
   connect(&egfrv3Panel, SIGNAL(EGFRvIIIPredictionOnExistingModel(const std::string, const std::string, const std::string)), this, SLOT(CallForEGFRvIIIPredictionOnExistingModelFromMain(const std::string, const std::string, const std::string)));
   connect(&egfrv3Panel, SIGNAL(PrepareNewEGFRvIIIPredictionModel(const std::string, const std::string)), this, SLOT(CallForNewEGFRvIIIPredictionModelFromMain(const std::string, const std::string)));
@@ -878,6 +871,7 @@ fMainWindow::fMainWindow()
   connect(&histoMatchPanel, SIGNAL(RunHistogramMatching(const std::string, const std::string, const std::string)), this, SLOT(CallImageHistogramMatching(const std::string, const std::string, const std::string)));
   connect(&deepMedicNormPanel, SIGNAL(RunDeepMedicNormalizer(const std::string, const std::string, const std::string, const std::string, const std::string, const std::string, const std::string, bool)), this, SLOT(CallImageDeepMedicNormalizer(const std::string, const std::string, const std::string, const std::string, const std::string, const std::string, const std::string, bool)));
   connect(&directionalityEstimator, SIGNAL(RunDirectionalityEstimator(const std::string, const std::string, const std::string)), this, SLOT(CallDirectionalityEstimator(const std::string, const std::string, const std::string)));
+  connect(&bratsPipelineDialog, SIGNAL(RunBraTSPipeline(const std::string, const std::string, const std::string, const std::string, const std::string)), this, SLOT(CallBraTSPipeline(const std::string, const std::string, const std::string, const std::string, const std::string)));
 
   connect(&pcaPanel, SIGNAL(ExistingModelBasedPCAEstimate(std::string, std::string, std::string)), this, SLOT(PCAEstimateOnExistingModel(const std::string &, const std::string &, const std::string &)));
   connect(&pcaPanel, SIGNAL(TrainNewPCAModel(std::string, std::string)), this, SLOT(TrainNewPCAModelOnGivenData(const std::string &, const std::string &)));
@@ -906,6 +900,9 @@ fMainWindow::fMainWindow()
   connect(this, SIGNAL(TissuePointsFocused(bool)), tumorPanel, SLOT(tTableFocused(bool)));
   connect(m_tabWidget, SIGNAL(currentChanged(int)), this, SLOT(panelChanged(int)));
   connect(infoPanel, SIGNAL(MoveSlicerCursor(double, double, double, int)), this, SLOT(MoveSlicerCursor(double, double, double, int)));
+
+  connect(&biascorrectionPanel, SIGNAL(CallBiasCorrection(const std::string, QString, int, int, int, int, float, float)),
+      this, SLOT(CallBiasCorrection(const std::string, QString, int, int, int, int, float, float)));
 
   AxialViewWidget->hide();
   CoronalViewWidget->hide();
@@ -938,9 +935,6 @@ fMainWindow::fMainWindow()
   m_progressBar->setValue(0);
 
   mHelpDlg = new fHelpDialog();
-
-  //connect
-  connect(m_toolTabdock, SIGNAL(topLevelChanged(bool)), this, SLOT(toolTabDockChanged(bool)));
 
   recurrencePanel.SetCurrentLoggerPath(m_tempFolderLocation);
   msubtypePanel.SetCurrentLoggerPath(m_tempFolderLocation);
@@ -2721,18 +2715,6 @@ void fMainWindow::MoveSlicerCursor(double x, double y, double z, int mode)
   propogateSlicerPosition();
 }
 
-void fMainWindow::toolTabDockChanged(bool bUnDocked)
-{
-  if (bUnDocked)
-  {
-	  this->m_toolTabdock->setWindowTitle("Double click to dock");
-  }
-  else
-  {
-	  this->m_toolTabdock->setWindowTitle("Double click to undock");
-  }
-}
-
 VectorVectorDouble fMainWindow::FormulateDrawingPointsForEdemaSegmentation()
 {
   VectorVectorDouble Indices;
@@ -3124,6 +3106,40 @@ void fMainWindow::clearMask(int label)
   UpdateNumberOfPointsInTable();
 }
 
+void fMainWindow::OnApplyMask()
+{
+	//check if mask exists
+	if (this->isMaskDefined())
+	{
+		//get loaded mask
+		ImageTypeFloat3D::Pointer mask = this->getMaskImage();
+
+		//get loaded images
+		std::vector<std::string> fileNames, modality, baseFileNames;
+		std::vector<ImageTypeFloat3D::Pointer> nloadedimages = this->getLodedImages(fileNames, modality);
+
+		//get base file names of all loaded images
+		for (unsigned int i = 0; i < mSlicerManagers.size(); i++)
+		{
+			baseFileNames.push_back(mSlicerManagers[i]->GetBaseFileName());
+		}
+
+		//apply mask on all loaded images
+		for (int i = 0; i < nloadedimages.size(); i++)
+		{
+			auto maskFilter = itk::MaskImageFilter<ImageTypeFloat3D, ImageTypeFloat3D>::New();
+			maskFilter->SetInput(nloadedimages[i]);
+			maskFilter->SetMaskImage(mask);
+			maskFilter->Update();
+			auto maskedimg = maskFilter->GetOutput();
+			std::string maskedFilename = m_tempFolderLocation + "/" + baseFileNames[i] + "_masked" + ".nii.gz"; //masked images are written in temp dir at this path
+			cbica::WriteImage<ImageTypeFloat3D>(maskedimg, maskedFilename);
+
+			//load the masked images back into captk
+			this->LoadSlicerImages(maskedFilename, CAPTK::ImageExtension::NIfTI);
+		}
+	}
+}
 
 void fMainWindow::StartEGFREstimate()
 {
@@ -4883,7 +4899,7 @@ void fMainWindow::CallForNewSurvivalPredictionModelFromMain(const std::string in
   }
 
 
-  if (mSurvivalPredictor.PrepareNewSurvivalPredictionModel(inputdirectory, QualifiedSubjects, outputdirectory) == false)
+  if (mSurvivalPredictor.TrainNewSurvivalPredictionModel(inputdirectory, QualifiedSubjects, outputdirectory) == false)
   {
     std::string message;
     message = "Survival Training did not finish as expected, please see log file for details: ";
@@ -5188,7 +5204,7 @@ void fMainWindow::TrainNewPCAModelOnGivenData(const std::string &inputdirectory,
     return;
   }
   PerfusionPCA mPCAEstimator;
-  if (mPCAEstimator.PrepareNewPCAModel(10,inputdirectory,outputdirectory,QualifiedSubjects))
+  if (mPCAEstimator.TrainNewPerfusionModel(10,inputdirectory,outputdirectory,QualifiedSubjects))
     ShowMessage("Trained pseudoprogression model has been saved at the specified location.", this);
   else
     ShowErrorMessage("Pseudoprogression Estimator wasn't able to save the training files as expected. See log file for details: " + loggerFile, this);
@@ -6245,79 +6261,70 @@ void fMainWindow::ApplicationSBRTAnalysis()
   }
 
   analysisPanel.SetTrainedModelLink(m_downloadLinks["inputs"]["LungCancer"]["Model"].as<std::string>());
-  analysisPanel.exec();
+  int result = analysisPanel.exec();
 
-  std::string inputFileName;
-  std::string maskName;
-  int roiLabel = 1;
-  std::string oname;
-  int outputFea = 0;
-  std::string logName;
-  std::string modelDir;
-
-  std::string metaName = analysisPanel.mInputPathName.toStdString() + "/meta_fea_proj.txt";
-  std::string projName = analysisPanel.mInputPathName.toStdString() + "/triFac_res_cpp_kc3_kr5_pet_cox_coeff_train_all.txt";
-
-  if (cbica::fileExists(metaName) == false ||
-    cbica::fileExists(projName) == false)
+  if (result == QDialog::Accepted)
   {
-    ShowErrorMessage("Model files not found. Please re-select the directory containing model files.", this);
-    return;
+	  std::string inputFileName;
+	  std::string maskName;
+	  int roiLabel = 1;
+	  std::string oname;
+	  int outputFea = 0;
+	  std::string logName;
+	  std::string modelDir;
+
+	  std::string metaName = analysisPanel.mInputPathName.toStdString() + "/meta_fea_proj.txt";
+	  std::string projName = analysisPanel.mInputPathName.toStdString() + "/triFac_res_cpp_kc3_kr5_pet_cox_coeff_train_all.txt";
+
+	  if (cbica::fileExists(metaName) == false ||
+		  cbica::fileExists(projName) == false)
+	  {
+		  ShowErrorMessage("Model files not found. Please re-select the directory containing model files.", this);
+		  return;
+	  }
+
+	  cbica::WriteImage< ImageTypeFloat3D >(getMaskImage(), m_tempFolderLocation + "/sbrtLoadedMask_flipped.nii.gz");
+	  cbica::Logging(loggerFile, "written temp mask");
+	  auto loadedMaskFile = m_tempFolderLocation + "/sbrtLoadedMask_flipped.nii.gz";
+
+	  //! calling algorithm
+	  SBRT_Analysis< float, ImageTypeFloat3D::ImageDimension > anaObject;
+
+	  if (!logName.empty())
+	  {
+		  anaObject.SetLogger(logName);
+	  }
+
+	  inputFileName = petImageFile;
+	  maskName = loadedMaskFile;
+
+	  anaObject.SetParameters(roiLabel);
+
+	  updateProgress(20, "Initializing");
+	  anaObject.Initialization(inputFileName, maskName);
+	  cbica::Logging(loggerFile, "SBRT Analysis Initialization complete");
+
+	  updateProgress(50, "Feature Extraction");
+	  anaObject.FeaExtraction();
+	  cbica::Logging(loggerFile, "SBRT Analysis Feature Extraction complete");
+
+	  updateProgress(100, "Risk prediction");
+	  anaObject.GetPredictedRisk(metaName, projName);
+	  cbica::Logging(loggerFile, "SBRT Analysis Risk Prediction complete");
+
+	  if (outputFea == 1)
+	  {
+		  anaObject.OutputFeature(oname);
+	  }
+
+	  updateProgress(0, ""); //! reset progress bar
+
+	  QString msgStr = QString("Predicted Risk (Survival): %1\nPredicted Risk(Nodal Failure): %2").arg(anaObject.GetSurivalRisk())
+		  .arg(anaObject.GetNodalFailureRisk());
+	  QMessageBox::information(this, "Predicted Risk", msgStr, QMessageBox::Ok);
   }
-
-  //! Following image flip is needed to correct the image orientation issue
-  typedef itk::FlipImageFilter< ImageType> FlipType;
-  FlipType::Pointer flip = FlipType::New();
-  FlipType::FlipAxesArrayType flipAxesSet;
-
-  flipAxesSet[0] = 0;
-  flipAxesSet[1] = -1;
-  flipAxesSet[2] = 0;
-
-  flip->SetFlipAxes(flipAxesSet);
-  flip->FlipAboutOriginOff();
-  flip->SetInput(getMaskImage());
-  flip->Update();
-
-  cbica::WriteImage< ImageTypeFloat3D >(flip->GetOutput(), m_tempFolderLocation + "/sbrtLoadedMask_flipped.nii.gz");
-  cbica::Logging(loggerFile, "written temp mask");
-  auto loadedMaskFile = m_tempFolderLocation + "/sbrtLoadedMask_flipped.nii.gz";
-
-  //! calling algorithm
-  SBRT_Analysis< float, ImageTypeFloat3D::ImageDimension > anaObject;
-
-  if (!logName.empty())
-  {
-    anaObject.SetLogger(logName);
-  }
-
-  inputFileName = petImageFile;
-  maskName = loadedMaskFile;
-
-  anaObject.SetParameters(roiLabel);
-
-  updateProgress(20, "Initializing");
-  anaObject.Initialization(inputFileName, maskName);
-  cbica::Logging(loggerFile, "SBRT Analysis Initialization complete");
-
-  updateProgress(50, "Feature Extraction");
-  anaObject.FeaExtraction();
-  cbica::Logging(loggerFile, "SBRT Analysis Feature Extraction complete");
-
-  updateProgress(100, "Risk prediction");
-  anaObject.GetPredictedRisk(metaName, projName);
-  cbica::Logging(loggerFile, "SBRT Analysis Risk Prediction complete");
-
-  if (outputFea == 1)
-  {
-    anaObject.OutputFeature(oname);
-  }
-
-  updateProgress(0, ""); //! reset progress bar
-
-  QString msgStr = QString("Predicted Risk (Survival): %1\nPredicted Risk(Nodal Failure): %2").arg(anaObject.GetSurivalRisk())
-    .arg(anaObject.GetNodalFailureRisk());
-  QMessageBox::information(this, "Predicted Risk", msgStr, QMessageBox::Ok);
+  else
+	  cbica::Logging(loggerFile, "ApplicationSBRTAnalysis Canceled");
 
   cbica::Logging(loggerFile, "Exiting ApplicationSBRTAnalysis ");
 }
@@ -7188,6 +7195,13 @@ void fMainWindow::ImageDenoising()
   }
 }
 
+void fMainWindow::ImageBraTSPipeline()
+{
+  // open a simple dialog box with reference image, input and output
+  bratsPipelineDialog.SetCurrentImagePath(mInputPathName);
+  bratsPipelineDialog.exec();
+}
+
 void fMainWindow::ImageMamogramPreprocess()
 {
   auto items = m_imagesTable->selectedItems();
@@ -7227,20 +7241,30 @@ void fMainWindow::ImageMamogramPreprocess()
 
 void fMainWindow::ImageBiasCorrection()
 {
-  auto items = m_imagesTable->selectedItems();
-  if (items.empty())
-  {
-    ShowErrorMessage("Please load an image to run bias correction on", this);
-    return;
-  }
+    // Requires an image to be loaded before allowing user access to the bias correction dialog
+    auto items = m_imagesTable->selectedItems();
+    if (items.empty())
+    {
+        ShowErrorMessage("Please load an image to run bias correction on", this);
+        return;
+    }
 
-  int index = GetSlicerIndexFromItem(items[0]);
-  if (index < 0 || index >= (int)mSlicerManagers.size())
-    return;
+    int index = GetSlicerIndexFromItem(items[0]);
+    if (index < 0 || index >= (int)mSlicerManagers.size())
+        return;
 
-  QString saveFileName = getSaveFile(this, mInputPathName, mInputPathName + "biasCorrect.nii.gz");
+    biascorrectionPanel.mInputPathName = mInputPathName;
+    biascorrectionPanel.exec();
+}
+
+void fMainWindow::CallBiasCorrection(const std::string correctionType, QString saveFileName,
+    int bias_splineOrder, int bias_otsuBins, int bias_maxIterations, int bias_fittingLevels,
+    float bias_filterNoise, float bias_fwhm)
+{
   if (!saveFileName.isEmpty())
   {
+    auto items = m_imagesTable->selectedItems();
+    int index = GetSlicerIndexFromItem(items[0]);
     auto saveFileName_string = saveFileName.toStdString();
     typedef itk::ImageDuplicator<ImageType> DuplicatorType;
     DuplicatorType::Pointer duplicator = DuplicatorType::New();
@@ -7249,12 +7273,8 @@ void fMainWindow::ImageBiasCorrection()
     ImageType::Pointer inputImage = duplicator->GetOutput();
     updateProgress(5, "Bias correction in process");
     BiasCorrection biasCorrector;
-    // Use default values for bias correction for now -- until we add the appropriate GUI elements
-    // TODO: Either allow the GUI to change the below values or otherwise reorganize (cleanup)
-    // Incorporating options into the GUI dialog should also address switching between N3/N4
-    int bias_splineOrder = 3, bias_otsuBins = 10, bias_maxIterations = 100, bias_fittingLevels = 4;
-    float bias_filterNoise = 0.01, bias_fwhm = 0.15;
-    ImageType::Pointer outputImage = biasCorrector.Run<ImageType>("n3",
+
+    ImageType::Pointer outputImage = biasCorrector.Run<ImageType>(correctionType,
                                                                   inputImage,
                                                                   bias_splineOrder,
                                                                   bias_maxIterations,
@@ -7660,8 +7680,6 @@ void fMainWindow::CallDeepMedicSegmentation(const std::string modelDirectory, co
       break;
     }
   }
-
-  ShowErrorMessage("Deep Learning inference takes 5-30 minutes to run, during which CaPTk will not be responsive.", this, "Long Running Application");
 
   QMessageBox *box = new QMessageBox(QMessageBox::Question, "Long running Application", 
     "Deep Learning inference takes 5-30 minutes to run, during which CaPTk will not be responsive; press OK to continue...", 
@@ -8561,6 +8579,49 @@ void fMainWindow::CallLabelValuesChange(const std::string oldValues, const std::
   readMaskFile(tempFile);
 }
 
+void fMainWindow::CallBraTSPipeline(const std::string t1ceImage, const std::string t1Image, const std::string t2Image, const std::string flImage, const std::string outputDir)
+{
+  if (!t1ceImage.empty() && !t1Image.empty() && !t2Image.empty() && !flImage.empty() && !outputDir.empty())
+  {
+    auto bratsPipelineExe = getApplicationPath("BraTSPipeline");
+    if (!cbica::exists(bratsPipelineExe))
+    {
+      ShowErrorMessage("Could not find the BraTSPipeline executable");
+      return;
+    }
+    
+    QStringList args;
+    args << "-t1" << t1Image.c_str() << 
+      "-t1c" << t1ceImage.c_str() << 
+      "-t2" << t2Image.c_str() << 
+      "-fl" << flImage.c_str() << 
+      "-o" << outputDir.c_str();
+
+    QMessageBox *box = new QMessageBox(QMessageBox::Question, "Long running Application",
+      "BraTS Pipeline takes ~30 minutes to run, during which CaPTk will not be responsive; press OK to continue...",
+      QMessageBox::Ok | QMessageBox::Cancel);
+    box->setAttribute(Qt::WA_DeleteOnClose); //makes sure the msgbox is deleted automatically when closed
+    box->setWindowModality(Qt::NonModal);
+    QCoreApplication::processEvents();
+    if (box->exec() == QMessageBox::Ok)
+    {
+      updateProgress(5, "Starting BraTS Pipeline");
+
+      if (startExternalProcess(bratsPipelineExe.c_str(), args) != 0)
+      {
+        ShowErrorMessage("BraTS Pipeline returned with exit code != 0");
+        updateProgress(0, "");
+        return;
+      }
+    }
+  }
+  else
+  {
+    ShowErrorMessage("All input images need to be provided for BraTS Pipeline to run.");
+    return;
+  }
+}
+
 void fMainWindow::CallImageHistogramMatching(const std::string referenceImage, const std::string inputImageFile, const std::string outputImageFile)
 {
   if (!referenceImage.empty() && !inputImageFile.empty() && !outputImageFile.empty())
@@ -8596,20 +8657,20 @@ void fMainWindow::CallImageDeepMedicNormalizer(const std::string inputImage, con
   const std::string quantLower, const std::string quantUpper,
   const std::string cutoffLower, const std::string cutoffUpper, bool wholeImageMeanThreshold)
 {
-  if (!inputImage.empty() && !maskImage.empty() && !outputImageFile.empty())
+  if (!inputImage.empty() && !outputImageFile.empty())
   {
-    if (!cbica::isFile(maskImage))
-    {
-      ShowErrorMessage("Mask Image passed is not a valid file, please re-check", this);
-      return;
-    }
     if (!cbica::isFile(inputImage))
     {
       ShowErrorMessage("Input Image passed is not a valid file, please re-check", this);
       return;
     }
     auto input = cbica::ReadImage< ImageTypeFloat3D >(inputImage);
-    auto mask = cbica::ReadImage< ImageTypeFloat3D >(maskImage);
+    auto mask = cbica::CreateImage< ImageTypeFloat3D >(input);
+
+    if (cbica::isFile(maskImage))
+    {
+      mask = cbica::ReadImage< ImageTypeFloat3D >(maskImage);
+    }
 
     auto qLower = std::atof(quantLower.c_str());
     auto qUpper = std::atof(quantUpper.c_str());
@@ -8684,18 +8745,18 @@ void fMainWindow::CallPerfusionMeasuresCalculation(const double TE, const bool r
 {
   if (!cbica::isFile(inputfilename))
   {
-    ShowErrorMessage("Input Image passed is not a valid file, please re-check", this);
+    ShowErrorMessage("Input image passed is not a valid file, please re-check", this);
     return;
   }
   typedef ImageTypeFloat4D PerfusionImageType;
 
   PerfusionDerivatives m_perfusionderivatives;
-  std::vector<typename ImageTypeFloat3D::Pointer> perfusionDerivatives = m_perfusionderivatives.Run<ImageTypeFloat3D, ImageTypeFloat4D>(inputfilename, rcbv, psr, ph, TE);
+  std::vector<typename ImageTypeFloat3D::Pointer> perfusionDerivatives = m_perfusionderivatives.Run<ImageTypeFloat3D, ImageTypeFloat4D>(inputfilename, rcbv, psr, ph, TE,outputFolder);
 
   if (perfusionDerivatives.size() == 0)
   {
     std::string message;
-    message = "Perfusion derivatives were not calculated as expected, please see log file for details: ";
+    message = "Perfusion derivatives were not calculated as expected, please see the log file for details: ";
     message = message + loggerFile;
     ShowErrorMessage(message, this);
   }
@@ -8766,8 +8827,9 @@ void fMainWindow::CallTrainingSimulation(const std::string featurefilename, cons
   int defaultfeatureselectiontype = 3;
   int defaultoptimizationtype = 0;
   int defaultcvtype = 1;
+
   TrainingModule m_trainingsimulator;
-  if (m_trainingsimulator.Run(featurefilename, targetfilename, outputFolder, classifier, folds, conf,defaultfeatureselectiontype, defaultoptimizationtype,defaultcvtype, modeldirectory))
+  if (m_trainingsimulator.Run(featurefilename, outputFolder, targetfilename, modeldirectory, classifier, folds, conf,defaultfeatureselectiontype, defaultoptimizationtype,defaultcvtype))
   {
     QString msg;
     msg = "Training model has been saved at the specified location.";
@@ -8902,16 +8964,30 @@ void fMainWindow::ChangeMaskOpacity() // multiLabel uncomment this function
 
 void fMainWindow::ChangeMaskOpacity(const float newOpacity)
 {
-  for (size_t i = 0; i < this->mSlicerManagers.size(); i++)
-  {
-    for (size_t j = 0; j < 3; j++)
-    {
-        this->mSlicerManagers[i]->GetSlicer(j)->mMaskOpacity = newOpacity;
-        this->mSlicerManagers[i]->GetSlicer(j)->mMaskActor->SetOpacity(newOpacity);
-        this->mSlicerManagers[i]->GetSlicer(j)->mMask->Modified();
-    }
-  }
-  UpdateRenderWindows(); // reflect the new value
+	if (!m_ComparisonMode)
+	{
+		//regular mode
+		for (size_t i = 0; i < this->mSlicerManagers.size(); i++)
+		{
+			for (size_t j = 0; j < 3; j++)
+			{
+				this->mSlicerManagers[i]->GetSlicer(j)->mMaskOpacity = newOpacity;
+				this->mSlicerManagers[i]->GetSlicer(j)->mMaskActor->SetOpacity(newOpacity);
+				this->mSlicerManagers[i]->GetSlicer(j)->mMask->Modified();
+			}
+		}
+		UpdateRenderWindows(); // reflect the new value
+	}
+	else
+	{
+		//comparison mode
+		std::vector<vtkSmartPointer<Slicer>> comparisonViewers = this->GetComparisonViewers();
+		for (int i = 0; i < comparisonViewers.size(); i++)
+		{
+			//update mask opacity on comparison viewers
+			comparisonViewers[i]->SetMaskOpacity(newOpacity);
+		}
+	}
 }
 
 void fMainWindow::ChangeDrawingLabel(int drawingLabel) // multiLabel uncomment this function
@@ -9015,7 +9091,7 @@ void fMainWindow::GeodesicTrainingFinishedWithErrorHandler(QString errorMessage)
 void fMainWindow::Registration(std::string fixedFileName, std::vector<std::string> inputFileNames,
   std::vector<std::string> outputFileNames, std::vector<std::string> matrixFileNames,
   std::string metrics, bool rigidMode, bool affineMode, bool deformMode,
-  std::string radii, std::string iterations)
+  std::string radii, std::string iterations, std::string degreesOfFreedom)
 {
   std::string configPathName;
   std::string configFileName;
@@ -9034,8 +9110,9 @@ void fMainWindow::Registration(std::string fixedFileName, std::vector<std::strin
     return;
   }
 
-  configPathName = itksys::SystemTools::GetFilenamePath(matrixFileNames[0]).c_str();
-  configFileName = configPathName + "/" + itksys::SystemTools::GetFilenameWithoutExtension(matrixFileNames[0]).c_str() + extn;
+  std::string path, base, ext;
+  cbica::splitFileName(matrixFileNames[0], path, base, ext);
+  configFileName = path + "/" + base + extn;
 
   for (unsigned int i = 0; i < inputFileNames.size(); i++)
   {
@@ -9066,7 +9143,7 @@ void fMainWindow::Registration(std::string fixedFileName, std::vector<std::strin
     }
     else if (affineMode)
     {
-      args << "Affine";
+      args << ("Affine-" + degreesOfFreedom).c_str();
     }
     else
     {

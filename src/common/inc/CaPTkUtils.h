@@ -111,8 +111,9 @@ struct NonNativeApp
 */
 inline int guessImageType(const std::string &fileName)
 {
+	std::string basename = cbica::getFilenameBase(fileName);
   int ImageSubType = CAPTK::ImageModalityType::IMAGE_TYPE_UNDEFINED;
-  std::string fileName_wrap = fileName;
+  std::string fileName_wrap = basename;
   std::transform(fileName_wrap.begin(), fileName_wrap.end(), fileName_wrap.begin(), ::tolower);
   if ((fileName_wrap.find("_t1ce") != std::string::npos) || (fileName_wrap.find("_t1-gad") != std::string::npos) ||
     (fileName_wrap.find("_t1-ce") != std::string::npos) || (fileName_wrap.find("_t1-gd") != std::string::npos) ||
@@ -294,6 +295,24 @@ inline void WriteCSVFilesWithHorizontalAndVerticalHeaders(VariableSizeMatrixType
   myfile.close();
 }
 
+
+inline void WriteCSVFilesWithHorizontalAndVerticalHeaders(VariableSizeMatrixType inputdata, std::vector<std::string> horizontal_ids, std::string vertical_ids[], std::string filepath)
+{
+  std::ofstream myfile;
+  myfile.open(filepath);
+  myfile << " ";
+  for(unsigned int col_index=0;col_index<vertical_ids->size();col_index++)
+      myfile << ","<<vertical_ids[col_index];
+  myfile << "\n";
+  for (unsigned int row_index = 0; row_index < inputdata.Rows(); row_index++)
+  {
+   myfile << horizontal_ids[row_index];
+    for (unsigned int col_index = 0; col_index < inputdata.Cols(); col_index++)
+       myfile << "," << std::to_string(inputdata[row_index][col_index]);
+    myfile << "\n";
+  }
+  myfile.close();
+}
 
 inline void WriteCSVFiles(VariableSizeMatrixType inputdata, std::string filepath)
 {

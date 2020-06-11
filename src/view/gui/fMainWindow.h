@@ -62,6 +62,8 @@ See COPYING file or https://www.med.upenn.edu/sbia/software-agreement.html
 #include "fFetalBrain.h"
 #include "fSBRTNoduleDialog.h"
 #include "fSBRTAnalysisDialog.h"
+#include "fBiasCorrectionDialog.h"
+#include "fBraTSSegmentation.h"
 
 #include <atomic>
 
@@ -247,6 +249,7 @@ private:
   fFetalBrain fetalbrainpanel;
   fSBRTNoduleDialog nodulePanel;
   fSBRTAnalysisDialog analysisPanel;
+  fBiasCorrectionDialog biascorrectionPanel;
 
   fSkullStripper skullStrippingPanel;
   fPCADialog pcaPanel;
@@ -260,8 +263,10 @@ private:
   fHistoMatcher histoMatchPanel;
   fDeepMedicNormalizer deepMedicNormPanel;
   fWhiteStripeObj whiteStripeNormalizer;
+  fBraTSSegmentation bratsPipelineDialog;
   fDirectionalityDialog directionalityEstimator;
   PreferencesDialog *preferenceDialog;
+  
 
   fDrawingPanel *drawingPanel;
   fFeaturePanel *featurePanel;
@@ -278,7 +283,6 @@ private:
   QMenu* menuLoadFileDicom;
   QMenu* menuLoadFileNifti;
   QMenu* menuDownload;
-
   QMenu* menuApp;
   QMenu* menuPreprocessing;
   QMenu* menuDeepLearning;
@@ -288,6 +292,8 @@ private:
   QAction *helpMenu_download;
   QAction *help_forum;
   QAction *help_bugs;
+  QAction *help_features;
+
   //-------------actions-------------
 
   QAction *actionLoad_Recurrence_Images;
@@ -522,6 +528,10 @@ signals:
   void TissuePointsFocused(bool bFocused);
 
 public slots:
+
+	//! apply mask to loaded images
+	void OnApplyMask();
+
 	//!display Preferences dialog
 	void OnPreferencesMenuClicked();
 
@@ -849,6 +859,11 @@ public slots:
   void CallImageHistogramMatching(const std::string referenceImage, const std::string inputImageFile, const std::string outputImageFile);
 
   /**
+  \brief Call BraTS Pipeline application
+  */
+  void CallBraTSPipeline(const std::string t1ceImage, const std::string t1Image, const std::string t2Image, const std::string flImage, const std::string outputDir);
+
+  /**
   \brief Call Histogram Matching module of ITK
   */
   void CallLabelValuesChange(const std::string oldValues, const std::string newValues);
@@ -876,6 +891,21 @@ public slots:
   */
   void CallSBRTNodule(const std::string seedImage, const int labelValue);
 
+  /** 
+  \brief Generate and load bias-corrected image
+  param correctionType string to determine bias correction method. Accepts n3 or n4 (case-insensitive)
+  param saveFileName where to save the output
+  param bias_splineOrder
+  param bias_otsuBins
+  param bias_maxIterations
+  param bias_fittingLevels 
+  param bias_filterNoise 
+  param bias_fwhm full width at half-maximum 
+  */
+  void CallBiasCorrection(const std::string correctionType, QString saveFileName,
+      int bias_splineOrder, int bias_otsuBins, int bias_maxIterations, int bias_fittingLevels,
+      float bias_filterNoise, float bias_fwhm);
+
   /**
   \brief Function that updates the co-ordinates (X and Y) of border
   param startX starting X co-ordinate
@@ -883,6 +913,7 @@ public slots:
   param endX ending X co-ordinate
   param endY ending Y co-ordinate
   */
+
   void UpdateBorderWidget(double startX, double startY, double endX, double endY);
 
   /**
@@ -1283,9 +1314,6 @@ public slots:
   */
   void UpdateLinkedNavigation(Slicer* refSlicer);
 
-  //! Dock/undock behaviour changed
-  void toolTabDockChanged(bool bUnDocked);
-
   //! Returns the active tab from the tab widget
   int getActiveTabId()
   {
@@ -1410,6 +1438,9 @@ public slots:
   //! Preprocessing for mammogram preprocessing
   void ImageMamogramPreprocess();
 
+  //! BraTS Pipeline
+  void ImageBraTSPipeline();
+
   //! Preprocessing for bias correction
   void ImageBiasCorrection();
 
@@ -1447,7 +1478,7 @@ public slots:
   void Registration(std::string fixedFileName, std::vector<std::string> inputFileNames,
     std::vector<std::string> outputFileNames, std::vector<std::string> matrixFileNames, 
     std::string metrics, bool rigidMode, bool affineMode, bool deformMode, 
-    std::string radii, std::string iterations);
+    std::string radii, std::string iterations, std::string degreesOfFreedom);
 
   //confirm before exit
   void closeEvent(QCloseEvent * event);

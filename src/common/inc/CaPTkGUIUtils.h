@@ -9,6 +9,9 @@
 #include <QCoreApplication>
 #include "qdesktopservices.h"
 
+#include "yaml-cpp/node/node.h"
+#include "yaml-cpp/yaml.h"
+
 static QString IMAGES_EXTENSIONS = "Images (*.nii.gz *.nii *.dcm)";
 
 inline void fixComboBox(QComboBox *comboBoxToEdit)
@@ -202,7 +205,6 @@ inline QString getSaveFile(QWidget *parent, const std::string inputPath, const s
   return getSaveFile(parent, QString(inputPath.c_str()), QString(defaultFileName.c_str()), QString(extensions.c_str()));
 }
 
-
 /**
 \brief Get full path of the executable from the application name
 */
@@ -313,4 +315,13 @@ inline std::string getCaPTkDataDir()
 inline bool openLink(const std::string &link)
 {
   return QDesktopServices::openUrl(QUrl(link.c_str()));
+}
+
+//! get download link
+inline std::string getAppropriateDownloadLink(const std::string &application, const std::string &type)
+{
+  YAML::Node m_downloadLinks;
+  m_downloadLinks = YAML::LoadFile(getCaPTkDataDir() + "/links.yaml");
+
+  return m_downloadLinks["inputs"][application][type].as<std::string>();
 }

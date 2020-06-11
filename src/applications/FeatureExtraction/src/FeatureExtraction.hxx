@@ -196,6 +196,7 @@ void FeatureExtraction< TImage >::CalculateLBP(const typename TImage::Pointer it
     lbpCalculator.SetRadius(m_Radius);
   }
   lbpCalculator.SetInputImage(itkImage);
+  lbpCalculator.SetInputMask(mask);
   lbpCalculator.SetNeighbors(m_neighborhood);
   lbpCalculator.SetLBPStyle(m_LBPStyle);
   if (m_debug)
@@ -319,7 +320,7 @@ void FeatureExtraction< TImage >::CalculateNGLDM(const typename TImage::Pointer 
     ngldmCalculator.EnableDebugMode();
   }
   ngldmCalculator.SetDistanceMax(GetMaximumDistanceWithinTheDefinedROI(itkImage, maskImage));
-  ngldmCalculator.Update();
+  //ngldmCalculator.Update();
   //std::cout << "[DEBUG] FeatureExtraction.hxx::NGLDM::calculator.GetRange() = " << ngldmCalculator.GetRange() << std::endl;
 
   auto temp = ngldmCalculator.GetOutput();
@@ -2221,9 +2222,12 @@ void FeatureExtraction< TImage >::Update()
         for (size_t i = 0; i < m_inputImages.size(); i++)
         {
           m_inputImages[i] = cbica::ResampleImage< TImage >(m_inputImages[i], m_resamplingResolution, m_resamplingInterpolator_Image);
-          if (m_debug)
+          if (m_debug || m_writeIntermediateFiles)
           {
-            std::cout << "[DEBUG] Writing resampled image(s) to the output directory.\n";
+            if (m_debug)
+            {
+              std::cout << "[DEBUG] Writing resampled image(s) to the output directory.\n";
+            }
             cbica::WriteImage< TImage >(m_inputImages[i], cbica::normPath(m_outputPath + "/image_" + m_modality[i] +
               "_resampled_" + std::to_string(m_resamplingResolution) + "-" + m_resamplingInterpolator_Image +
               "_" + m_initializedTimestamp + ".nii.gz"));
@@ -2237,9 +2241,12 @@ void FeatureExtraction< TImage >::Update()
           roundingFilter->Update();
           m_Mask = roundingFilter->GetOutput();
         }
-        if (m_debug)
+        if (m_debug || m_writeIntermediateFiles)
         {
-          std::cout << "[DEBUG] Writing resampled mask to the output directory.\n";
+          if (m_debug)
+          {
+            std::cout << "[DEBUG] Writing resampled mask to the output directory.\n";
+          }
           cbica::WriteImage< TImage >(m_Mask, cbica::normPath(m_outputPath +
             "/mask_resampled_" + std::to_string(m_resamplingResolution) + "-" + m_resamplingInterpolator_Mask + 
             "_" + m_initializedTimestamp + ".nii.gz"));
@@ -2946,10 +2953,10 @@ void FeatureExtraction< TImage >::Update()
                       if (TImage::ImageDimension == 3)
                       {
                         std::string currentFeatureFamily = FeatureFamilyString[f];
-                        CalculateNGLDM(currentInputImage_patch, currentMask_patch, offsets[0], std::get<4>(temp->second));
-                        WriteFeatures(m_modality[i], allROIs[j].label, currentFeatureFamily, std::get<4>(temp->second),
-                          "Axis=3D;Dimension=3D;Bins=" + std::to_string(m_Bins) + ";Directions=" + std::to_string(m_Direction) +
-                          ";Radius=" + std::to_string(m_Radius) + ";OffsetType=" + m_offsetSelect, m_currentLatticeCenter, writeFeatureMapsAndLattice, allROIs[j].weight);
+                        //CalculateNGLDM(currentInputImage_patch, currentMask_patch, offsets[0], std::get<4>(temp->second));
+                        //WriteFeatures(m_modality[i], allROIs[j].label, currentFeatureFamily, std::get<4>(temp->second),
+                        //  "Axis=3D;Dimension=3D;Bins=" + std::to_string(m_Bins) + ";Directions=" + std::to_string(m_Direction) +
+                        //  ";Radius=" + std::to_string(m_Radius) + ";OffsetType=" + m_offsetSelect, m_currentLatticeCenter, writeFeatureMapsAndLattice, allROIs[j].weight);
 
                         //if (!writeFeatureMapsAndLattice && m_SliceComputation)
                         //{
@@ -3266,6 +3273,8 @@ void FeatureExtraction< TImage >::Update()
         }
         else
         {
+          currentPatientModalityROIFeatureFamilyFeature = cbica::stringReplace(currentPatientModalityROIFeatureFamilyFeature, m_patientID + "_", "");
+
           m_trainingFile_featureNames += currentPatientModalityROIFeatureFamilyFeature + "Max" + ",";
           m_trainingFile_features += currentMax + ",";
           m_trainingFile_featureNames += currentPatientModalityROIFeatureFamilyFeature + "Min" + ",";
@@ -3371,6 +3380,6 @@ void FeatureExtraction< TImage >::Update()
 
       auto t2 = std::chrono::high_resolution_clock::now();
       std::cout << "Total computation time: " << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << " milliseconds\n";
-    }
-  }
-}
+    } // end imagesAreOkay check
+  } // end algorithmDone check
+} // end update function

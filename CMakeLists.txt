@@ -12,9 +12,9 @@ SET( ${PROJECT_NAME}_Variant "Full" ) # the particular variant of CaPTk (Full/Ne
 # STRING(TIMESTAMP TODAY "%Y%m%d")
 
 SET( PROJECT_VERSION_MAJOR 1 )
-SET( PROJECT_VERSION_MINOR 7 )
-SET( PROJECT_VERSION_PATCH 7.nonRelease )
-SET( PROJECT_VERSION_TWEAK )
+SET( PROJECT_VERSION_MINOR 8 )
+SET( PROJECT_VERSION_PATCH 0.nonRelease )
+SET( PROJECT_VERSION_TWEAK ) 
 
 # check for the string "nonRelease" in the PROJECT_VERSION_PATCH variable
 # if it is found, add timestamp and git hash of commit to the version
@@ -141,6 +141,8 @@ ELSE()
   ENDIF()
 ENDIF()
 
+# MESSAGE()
+
 SET( PROJECT_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}" CACHE STRING "The project version" FORCE )
 
 MESSAGE( AUTHOR_WARNING "Building CaPTk version ${PROJECT_VERSION}")
@@ -238,8 +240,6 @@ IF( NOT BUILD_DOCUMENTATION_ONLY )
   MARK_AS_ADVANCED(CAPTK_BUILD_OPTION)
   MARK_AS_ADVANCED(CAPTK_DISABLE_CWL)
 
-  # MESSAGE( AUTHOR_WARNING "=== [DEBUG] Building CaPTk version=${PROJECT_VERSION}" )
-  
   SET( CMAKE_COLOR_MAKEFILE ON )
   # option to compile only the viewer
   SET( CAPTK_BUILD_CONSOLE_ONLY OFF CACHE BOOL "Do you want only the interactive capabilities of ${PROJECT_NAME}? Enabling this will remove all algorithms from compilation." )
@@ -261,7 +261,7 @@ IF( NOT BUILD_DOCUMENTATION_ONLY )
   ### third party library processing
   # find and include all third party libraries
   SUBDIRLIST(SUBDIRECTORIES ${THIRDPARTY_LIB_PATH})
-  
+
   FIND_PACKAGE( ITK REQUIRED )
   #FIND_PACKAGE( ITK REQUIRED )
   INCLUDE("${ITK_USE_FILE}")
@@ -1120,13 +1120,14 @@ IF( NOT BUILD_DOCUMENTATION_ONLY )
 
         GET_FILENAME_COMPONENT( EXEC_IN_BIN ${EXEC} NAME_WE )
 
-        # GET_TARGET_PROPERTY(TARGET_TYPE ${EXEC_IN_BIN} TYPE)
         IF (NOT EXEC_IN_BIN STREQUAL "BreastTexturePipeline")
           # MESSAGE( STATUS "[debug]EXEC_IN_BIN == ${EXEC_IN_BIN}")
           changeLibOmpDylib(${EXE_NAME} ${EXEC_IN_BIN})
         ENDIF ()
         
       ENDFOREACH()
+
+      changeLibOmpDylib(${EXE_NAME} "greedy")
 
     ENDIF()
 
