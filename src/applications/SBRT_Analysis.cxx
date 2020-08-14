@@ -48,6 +48,11 @@ int main(int argc, char** argv)
   {
     outputFea = 1;
     parser.getParameterValue("o", oname);
+    auto temp = cbica::getFilenamePath(oname, false);
+    if (!cbica::isDir(temp))
+    {
+      cbica::createDir(temp);
+    }
   }
   if (parser.isPresent("L"))
   {
@@ -85,6 +90,14 @@ int main(int argc, char** argv)
   {
 	  std::cout << "Only PET image need to be loaded for SBRT Analysis along with mask." << std::endl;
 	  return 0;
+  }
+  if (cbica::isFile(modelDir + "/VERSION.yaml"))
+  {
+      if (!cbica::IsCompatible(modelDir + "/VERSION.yaml"))
+      {
+          std::cerr << "The version of model is incompatible with this version of CaPTk.\n";
+          return EXIT_FAILURE;
+      }
   }
   
   SBRT_Analysis< float, imageDimension > anaObject;

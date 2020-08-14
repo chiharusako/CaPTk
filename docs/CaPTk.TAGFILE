@@ -35,7 +35,7 @@
     <docanchor file="FAQ.html" title="Is there a minimum recommended screen resolution for running CaPTk?">gs_FAQ_6</docanchor>
     <docanchor file="FAQ.html" title="Where can I find the CaPTk Docker Image?">gs_FAQ_7</docanchor>
     <docanchor file="FAQ.html" title="How do I run the CaPTk Docker Image to show the interface?">gs_FAQ_8</docanchor>
-    <docanchor file="FAQ.html" title="What if I am having an issue not listed here?">gs_FAQ_9</docanchor>
+    <docanchor file="FAQ.html" title="Is there something wrong with Feature Extraction?">gs_FAQ_9</docanchor>
   </compound>
   <compound kind="page">
     <name>How_To_Guides</name>
@@ -76,6 +76,11 @@
     <name>preprocessing_zScoreNorm</name>
     <title>Z-Scoring Normalization</title>
     <filename>preprocessing_zScoreNorm.html</filename>
+  </compound>
+  <compound kind="page">
+    <name>preprocessing_brats</name>
+    <title>BraTS Pre-processing Pipeline</title>
+    <filename>preprocessing_brats.html</filename>
   </compound>
   <compound kind="page">
     <name>ht_Segmentation</name>
@@ -186,6 +191,11 @@
     <name>Diffusion_Derivatives</name>
     <title>Miscellaneous: Diffusion Derivatives</title>
     <filename>Diffusion_Derivatives.html</filename>
+  </compound>
+  <compound kind="page">
+    <name>Perfusion_Alignment</name>
+    <title>Miscellaneous: Perfusion Alignment</title>
+    <filename>Perfusion_Alignment.html</filename>
   </compound>
   <compound kind="page">
     <name>Perfusion_Derivatives</name>
